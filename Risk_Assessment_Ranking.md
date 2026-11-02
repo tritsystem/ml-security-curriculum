@@ -1,0 +1,23 @@
+# Threat Model: Hugging Face Models on a Shared GPU Training Cluster
+
+**Scope:** a team downloads models and datasets from the Hugging Face Hub and fine-tunes them on a multi-tenant GPU cluster (shared storage; Ray/torchrun/NCCL for distributed jobs).
+**Scoring:** Likelihood (1–5) × Impact (1–5), maximum 25. Likelihood = exposure × ease of exploitation; Impact = attacker gain × blast radius. Critical ≥ 20 · High 15–19 · Medium 9–14 · Low ≤ 8.
+
+| # | Threat | L × I | Attack vector | Defend (prevent) | Detect (monitor) |
+|---|---|---|---|---|---|
+| 1 | **Untrusted deserialization** | 5 × 5 = **25** Critical | Pickle-based `.bin`/`.pt` files execute embedded code (`__reduce__`) on `torch.load`; `trust_remote_code=True` runs repo code | Safetensors only; legacy files via `torch.load(weights_only=True)` or converted in a no-network, no-credential sandbox; ban `trust_remote_code` by default | Scan every file pre-load (Fickling, ModelScan); alert on child processes or outbound connections from loader jobs |
+| 2 | **Insecure cluster fabric** | 4 × 5 = **20** Critical | Ray/torchrun/scheduler control planes trust the network; NCCL traffic is unauthenticated and unencrypted; one foothold spreads cluster-wide | Enable Ray token auth (≥ 2.52; off by default); per-team network segments; dashboards only via SSH tunnel, never internet-facing | Alert on unexpected job submissions and on traffic between teams' jobs or to the control plane |
+| 3 | **Credential exposure** | 4 × 4 = **16** High | `HF_TOKEN`, cloud and registry keys baked into shared environment configs and images; any job compromise inherits them | Short-lived, per-job, read-only tokens; secrets via a secret store or workload identity, never env files or images | Alert on token use from unexpected hosts or for unexpected actions (e.g. a training token pushing a model) |
+| 4 | **Native parser / kernel exploits** | 3 × 4 = **12** Medium | Crafted shapes or offsets in "safe" formats (safetensors, GGUF) trigger out-of-bounds reads/writes in C++/CUDA loaders and quantization kernels | Patch frameworks, GPU driver and NVIDIA Container Toolkit (≥ 1.17.4, CVE-2024-0132); run ingest non-root, no host mounts, dropped capabilities | Validate headers against file size before load; treat ingest crashes (SIGSEGV, illegal memory access) as security events |
+| 5 | **Upstream model / data poisoning** | 3 × 4 = **12** Medium | Backdoored base weights or poisoned datasets pass benchmarks and fire on triggers; every downstream fine-tune inherits them | Pin exact revisions (git commit hash); internal model registry and mirror; allowlisted publishers; record provenance | Compare each candidate with the base model on fixed tests plus trigger probes; alert on hash changes after approval |
+| 6 | **Silent numerical corruption** | 3 × 3 = **9** Medium | Compiler/framework regressions, mixed-precision drift, hardware faults corrupt training with no error | Pin framework versions; check critical ops against an FP64 reference before upgrading | Alert on NaNs, loss spikes, gradient-norm anomalies; checkpoint canary evals; ECC counters (`nvidia-smi -q -d ECC`, data-centre GPUs) |
+| 7 | **Weak accelerator isolation** | 2 × 3 = **6** Low | Cross-team leakage via shared GPU contexts (MPS, time-slicing). LeftoverLocals did not affect NVIDIA | Whole GPUs per job or MIG partitions; no cross-team time-slicing or MPS | Audit GPU sharing per tenant; flag cross-team co-location on the same GPU |
+
+**Key judgments**
+- Pickle is the risk that matters most; everything else is a distant second. Removing pickle (safetensors + `weights_only`) drops #1's likelihood from 5 to 2, taking it from 25 to 10.
+- #4 is distinct from #1: no code runs, but the loader trusts the file. I found this class myself in bitsandbytes, where a wrong-shaped checkpoint made a CUDA kernel read out of bounds.
+- #6 is low as an attack but high as a reliability cost. I reproduced a PyTorch bug where compiled code returned variances 50–100% wrong with no error, traced its trigger, and tested a fix.
+- Exposing any control plane to the internet makes #2 a direct entry point (L 5 → 25). Score individual vulnerabilities separately with CVSS 4.0.
+
+**Appendix: implementation and audit stack**
+Fickling (gate) · ModelScan (second opinion: its denylist missed a pickle that called an unlisted function, which Fickling caught) · `pickletools` (deserialization) · safetensors header parsing · `gguf-dump` (format validation) · compute-sanitizer · ASan/UBSan · valgrind (native code) · mitmproxy (Hub client and cache behaviour) · `nmap`/`ss` (exposed fabric ports) · `capsh`/amicontained (container capabilities).

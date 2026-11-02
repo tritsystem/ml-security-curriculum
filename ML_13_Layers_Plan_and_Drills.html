@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ML in 13 layers: plan and timed drills</title>
+<style>
+  :root { --bg:#fff; --fg:#1d1d1f; --muted:#6b6b70; --line:#e3e3e6; --card:#f6f6f8; --accent:#2f5bd3; --ok:#1f7a3a; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#141416; --fg:#ececef; --muted:#9a9aa2; --line:#2c2c31; --card:#1d1d21; --accent:#8aa8ff; --ok:#6cc68a; --bad:#ff8a80; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--fg); }
+  header { position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--line); padding:10px 14px; z-index:2; }
+  h1 { font-size:18px; margin:0 0 8px; }
+  nav button { margin-right:6px; }
+  main { padding:14px; max-width:760px; margin:0 auto; }
+  button, select { font:inherit; padding:10px 14px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.on { outline:2px solid var(--accent); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin:10px 0; }
+  .muted { color:var(--muted); font-size:14px; }
+  details summary { cursor:pointer; font-weight:600; padding:4px 0; }
+  ol, ul { padding-left:20px; margin:6px 0; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .q { font-size:17px; margin:10px 0; }
+  input[type=text] { font:inherit; padding:12px; width:100%; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+  .choices button { display:block; width:100%; text-align:left; margin:6px 0; }
+  .fb.ok { color:var(--ok); } .fb.bad { color:var(--bad); }
+  .big { font-size:28px; font-weight:700; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  td, th { border-bottom:1px solid var(--line); padding:6px 4px; text-align:left; }
+  .hide { display:none; }
+  a button { cursor:pointer; }
+  #ask { margin-top:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ML in 13 layers</h1>
+  <nav class="row">
+    <button id="tab-drill" class="on">Drill</button>
+    <button id="tab-plan">Plan</button>
+    <button id="tab-stats">Progress</button>
+  </nav>
+</header>
+<main>
+  <section id="view-drill">
+    <div class="card">
+      <div class="row">
+        <label class="muted">Round
+          <select id="dur"><option value="60">1 min</option><option value="120" selected>2 min</option><option value="300">5 min</option><option value="0">No timer</option></select>
+        </label>
+        <label class="muted">Layers
+          <select id="layerSel"></select>
+        </label>
+        <button class="primary" id="start">Start round</button>
+      </div>
+      <p class="muted">Numeric answers accept a small tolerance. Weak layers come up more often in "All (adaptive)".</p>
+    </div>
+    <div id="round" class="card hide">
+      <div class="row"><span class="big" id="clock">--</span><span class="muted" id="score"></span></div>
+      <div class="muted" id="qlayer"></div>
+      <div class="q" id="qtext"></div>
+      <div id="answerArea"></div>
+      <div class="fb" id="fb"></div>
+      <div id="ask"></div>
+      <div class="row"><button id="next" class="hide">Next</button><button id="stop">End round</button></div>
+    </div>
+    <div id="summary" class="card hide"></div>
+  </section>
+  <section id="view-plan" class="hide"></section>
+  <section id="view-stats" class="hide"></section>
+</main>
+<script>
+"use strict";
+// ---------- helpers ----------
+const R = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const fmt = (x, d = 2) => Number(x.toFixed(d)).toLocaleString("en-US", { maximumFractionDigits: d });
+function wilson(k, n, z = 1.96) {
+  const p = k / n, d = 1 + z * z / n, c = (p + z * z / (2 * n)) / d;
+  const h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
+  return [100 * (c - h), 100 * (c + h)];
+}
+function binomTwoSided(a, b) { // exact McNemar p-value on discordant pairs
+  const n = a + b; if (!n) return 1;
+  let s = 0, c = 1; const k = Math.min(a, b);
+  for (let j = 0; j <= n; j++) { if (j <= k) s += c; c = c * (n - j) / (j + 1); }
+  return Math.min(1, 2 * s / Math.pow(2, n));
+}
+// Question shape: {q, kind:'num'|'mc', answer, tol (relative), choices, explain}
+const num = (q, answer, explain, tol = 0.02) => ({ q, kind: "num", answer, tol, explain });
+const mc = (q, choices, correct, explain) => ({ q, kind: "mc", choices, answer: correct, explain });
+
+// ---------- the 13 layers: plan + generators ----------
+const LAYERS = [
+ { id: 1, name: "Mathematics", goal: "Linear algebra, calculus, probability and floating point well enough to compute a forward and backward pass by hand.",
+   sessions: ["Learn: matmul shapes, chain rule, softmax, fp16/bf16/fp32 formats.", "Do: compute one attention head by hand in NumPy, then check it against PyTorch.", "Prove: reproduce a result in fp64 and in fp16 and explain the difference."],
+   checkpoint: "Explain why fp16 overflows at 65504 and why bf16 does not overflow there.",
+   lab: "NumPy attention head vs torch.nn.functional.scaled_dot_product_attention, max abs diff < 1e-6 in fp64.",
+   gens: [
+    () => { const m = R(2, 64), k = R(2, 64), n = R(2, 64); return num(`A (${m}×${k}) @ B (${k}×${n}) needs how many multiply-adds?`, m * k * n, `m·k·n = ${m}·${k}·${n} = ${m * k * n}.`, 0); },
+    () => { const a = R(1, 5), b = R(1, 5), c = R(1, 5); const e = [a, b, c].map(Math.exp), s = e[0] + e[1] + e[2];
+      return num(`softmax([${a}, ${b}, ${c}])[0] = ? (3 decimals)`, e[0] / s, `exp(${a}) / (exp(${a})+exp(${b})+exp(${c})) = ${fmt(e[0] / s, 4)}. Subtracting the max first gives the same value without overflow.`, 0.005); },
+    () => mc("Largest finite fp16 value?", ["65504", "65536", "3.4e38", "32767"], 0, "fp16 has 5 exponent bits: max = (2 − 2^−10)·2^15 = 65504."),
+    () => mc("Machine epsilon of fp16 (spacing above 1.0)?", ["2^−10 ≈ 0.000977", "2^−7 ≈ 0.0078", "2^−23 ≈ 1.2e−7", "2^−52"], 0, "fp16 has 10 mantissa bits. bf16 has 7 (eps 2^−7), fp32 has 23."),
+    () => { const x = R(2, 9), w = R(2, 9); return num(`y = (w·x)², with w = ${w}, x = ${x}. dy/dw = ?`, 2 * w * x * x, `Chain rule: 2(wx)·x = 2·${w}·${x}² = ${2 * w * x * x}.`, 0); },
+   ]},
+ { id: 2, name: "Learning theory", goal: "Why fitting generalises: loss, optimisation, overfitting and held-out evaluation.",
+   sessions: ["Learn: SGD/Adam, learning rate, bias-variance, train/val/test.", "Do: fit a tiny model and plot train vs held-out loss until it overfits.", "Prove: show which split you would trust and why, with numbers."],
+   checkpoint: "Given train 99% and held-out 60%, name the failure and two fixes.",
+   lab: "Train a small MLP on 60 router_train questions; report held-out accuracy with a Wilson interval.",
+   gens: [
+    () => { const w = R(-9, 9), g = R(-9, 9), lr = pick([0.1, 0.01, 0.5]); return num(`SGD: w = ${w}, gradient = ${g}, lr = ${lr}. New w = ?`, w - lr * g, `w − lr·g = ${w} − ${lr}·${g} = ${fmt(w - lr * g, 3)}.`, 0.001); },
+    () => mc("Train 99%, held-out 61%. Most likely?", ["Overfitting", "Underfitting", "Data leakage", "Too low learning rate"], 0, "A large train/held-out gap is overfitting. Leakage usually inflates held-out instead."),
+    () => mc("Held-out accuracy suddenly 100% after you tuned prompts on it. What happened?", ["The held-out set became a training set", "The model generalised", "Tolerance too loose", "Greedy decoding"], 0, "Tuning on a split contaminates it. Ring-eval rule: freeze anything informed by test outputs."),
+    () => { const n = pick([60, 120, 180]), k = R(Math.floor(n * 0.4), n); const [lo] = wilson(k, n); return num(`${k}/${n} correct. Lower end of the 95% Wilson interval (%)?`, lo, `Wilson: ${fmt(lo, 1)}% to ${fmt(wilson(k, n)[1], 1)}%.`, 0.02); },
+   ]},
+ { id: 3, name: "Data", goal: "Collection, splits, leakage, distribution shift and tokenisation.",
+   sessions: ["Learn: train/test overlap, template leakage, shift, tokenizers.", "Do: build a dataset with disjoint train and test templates (dataset2.py style).", "Prove: an assert that no test prompt appears in training."],
+   checkpoint: "Explain why the ring-eval RX arm had to be dropped.",
+   lab: "Re-run dataset.py and dataset2.py; verify the overlap asserts by deliberately breaking them.",
+   gens: [
+    () => mc("Packet task: extraction failed on 'rejected', 'arrived', 'out_err'. Root cause?", ["Parser vocabulary missing test-template words", "Model misread numbers", "Token limit", "Wrong tolerance"], 0, "Every parsed extraction was correct; failures were label mismatches with the gate's regex."),
+    () => mc("You saw test outputs, then wrote a regex. That regex is…", ["Test-informed: its result is contaminated", "Fine if it is short", "Fine if seeds differ", "A held-out baseline"], 0, "Design choices made after seeing test data leak the test set into the method."),
+    () => { const n = R(2, 5); return num(`An invoice has ${n} line items. Fields the extractor must output (qty and price per item, plus discount and tax)?`, 2 * n + 2, `${n}×2 + 2 = ${2 * n + 2}.`, 0); },
+   ]},
+ { id: 4, name: "Model architecture", goal: "MLP, CNN, transformer attention, KV cache, MoE, and spiking/reservoir models.",
+   sessions: ["Learn: attention, multi-head, grouped KV heads, positional encoding.", "Do: count parameters of one transformer block from its config.", "Prove: compute KV-cache size for Qwen2.5-1.5B and check it against measured VRAM."],
+   checkpoint: "Why does a KV cache make decoding cheaper, and what does it cost?",
+   lab: "Read Qwen2.5-1.5B config.json; compute per-token KV bytes; compare with torch.cuda.memory_allocated deltas.",
+   gens: [
+    () => { const L = pick([24, 28, 32]), h = pick([2, 4, 8]), d = pick([64, 128]), t = pick([512, 1024, 4096]), b = 2;
+      const bytes = 2 * L * h * d * t * b; return num(`KV cache (fp16, batch 1): ${L} layers, ${h} KV heads, head dim ${d}, ${t} tokens. Size in MB?`, bytes / 2 ** 20, `2 (K and V) × ${L} × ${h} × ${d} × ${t} × 2 bytes = ${fmt(bytes / 2 ** 20, 1)} MB.`, 0.02); },
+    () => { const dm = pick([512, 768, 1024, 1536]); return num(`Attention q,k,v,o projections (no bias, full heads), d_model = ${dm}. Parameters?`, 4 * dm * dm, `4 × d² = ${4 * dm * dm}.`, 0); },
+    () => mc("Qwen2.5-1.5B: 12 query heads, 2 KV heads. That is…", ["Grouped-query attention", "Multi-query with 1 KV head", "Standard multi-head", "Mixture of experts"], 0, "Several query heads share each KV head: smaller KV cache."),
+   ]},
+ { id: 5, name: "Training", goal: "Autograd, mixed precision, LoRA and fine-tuning, checkpointing, distributed basics.",
+   sessions: ["Learn: LoRA (W + BA), rank, which matrices to adapt; AMP and loss scaling.", "Do: train one LoRA adapter on 60 examples; log loss.", "Prove: show the adapter changes outputs, and measure whether it helps on held-out data."],
+   checkpoint: "Ring-eval R1 = R0 (p = 1.00). What does that say about where training effort went?",
+   lab: "Train an extractor adapter (the stage that mattered) instead of the reasoner; pre-register the expected gain.",
+   gens: [
+    () => { const r = pick([4, 8, 16]), din = pick([896, 1536, 2048]), dout = pick([128, 256, 1536]); return num(`LoRA rank ${r} on a ${din}→${dout} linear layer: trainable parameters?`, r * (din + dout), `r·(d_in + d_out) = ${r}·(${din}+${dout}) = ${r * (din + dout)}.`, 0); },
+    () => mc("LoRA B initialised to zero means the untrained adapter…", ["Leaves the base model's output unchanged", "Randomises outputs", "Doubles the weights", "Freezes A"], 0, "BA = 0 at start, so W + BA = W."),
+    () => mc("Loss scaling in fp16 training exists to…", ["Stop small gradients underflowing to zero", "Speed up the optimizer", "Reduce memory", "Prevent overfitting"], 0, "fp16's small range flushes tiny gradients; scaling lifts them into range."),
+   ]},
+ { id: 6, name: "Framework (PyTorch)", goal: "Dispatch, dtype promotion, autograd internals, and graph compilers.",
+   sessions: ["Learn: type promotion rules, in-place ops, torch.compile/Inductor and its caches.", "Do: TORCH_LOGS=output_code on a small function; read the generated kernel.", "Prove: find one case where compiled and eager differ, and explain it."],
+   checkpoint: "PyTorch #201473: why can a performance heuristic expose a latent correctness bug?",
+   lab: "Compile var() on CPU for sizes around 4096 multiples; compare eager vs compiled in fp64.",
+   gens: [
+    () => mc("torch.tensor([1], dtype=int8) + torch.tensor([1.5], dtype=float16) has dtype…", ["float16", "float32", "int8", "float64"], 0, "Integer + floating tensor promotes to the floating dtype of the operands."),
+    () => mc("A torch.compile 'fix' seems not to work. First check?", ["Disable the compile caches", "Reinstall CUDA", "Use float64", "Lower the batch size"], 0, "Cached compiled artefacts can make an old kernel run after a fix."),
+    () => mc("Correct backward through sqrt at 0 needs…", ["A guard so the gradient is finite (the double-where pattern)", "Nothing; it is 0", "fp64 only", "detach()"], 0, "d/dx sqrt(x) = 1/(2√x) is infinite at 0; guard both branches."),
+   ]},
+ { id: 7, name: "Kernels", goal: "CUDA/Triton execution, memory hierarchy, index arithmetic, synchronisation.",
+   sessions: ["Learn: grids/blocks, coalescing, shared memory, barriers.", "Do: write one Triton kernel with a CPU reference (battle plan P2).", "Prove: compute-sanitizer memcheck clean at sizes 0, 1, BLOCK±1."],
+   checkpoint: "bitsandbytes #2105: derive why floor division under-allocated the packed buffer.",
+   lab: "Triton LIF-step or ternary-unpack kernel; parity in fp16/bf16/fp32 against the CPU reference.",
+   gens: [
+    () => { const n = R(100, 5000), b = pick([128, 256, 512]); return num(`${n} elements, block size ${b}. Number of blocks?`, Math.ceil(n / b), `ceil(${n}/${b}) = ${Math.ceil(n / b)}.`, 0); },
+    () => { const n = R(1001, 9999), item = pick([2, 4, 8]); const right = Math.ceil(n / (2 * item)); return num(`4-bit packing: ${n} weights into ${item}-byte containers (2 weights per byte). Containers needed?`, right, `ceil(n / (2·itemsize)) = ceil(${n}/${2 * item}) = ${right}. Floor division would give ${Math.floor((n + 1) / (2 * item))}.`, 0); },
+    () => mc("int32 element index overflows when a tensor has more than…", ["2,147,483,647 elements", "65,535 elements", "4,294,967,295 bytes always", "1 GB"], 0, "2^31 − 1. Size-math wraps are a recurring bug class."),
+   ]},
+ { id: 8, name: "Hardware", goal: "Bandwidth vs compute, VRAM, PCIe, precision formats, analog and neuromorphic options.",
+   sessions: ["Learn: roofline model; why decoding is bandwidth-bound.", "Do: measure tokens/s for 0.5B, 1.5B, 3B on the RTX 5060.", "Prove: compare measured tokens/s with bandwidth ÷ weight bytes."],
+   checkpoint: "Why can't you 'bypass' VRAM bandwidth, and what actually reduces bytes per answer?",
+   lab: "Time greedy decode for each Qwen size; plot against the 448 GB/s ceiling.",
+   gens: [
+    () => { const bw = pick([448, 900, 31.5, 90]), gb = pick([1, 3.1, 5.9, 14]); return num(`Bandwidth ${bw} GB/s, weights ${gb} GB. Decode ceiling in tokens/s?`, bw / gb, `≈ bandwidth ÷ bytes read per token = ${bw}/${gb} ≈ ${fmt(bw / gb, 1)}.`, 0.03); },
+    () => { const p = pick([0.5, 1.5, 3, 7]), bits = pick([16, 8, 4]); return num(`${p}B parameters at ${bits}-bit. Weight memory in GB (10^9 bytes)?`, p * bits / 8, `${p}e9 × ${bits}/8 bytes = ${fmt(p * bits / 8, 2)} GB.`, 0.01); },
+    () => mc("Your RTX 5060 link is PCIe 5.0 x8. Rough per-direction bandwidth?", ["~31.5 GB/s", "~448 GB/s", "~4 GB/s", "~90 GB/s"], 0, "Measured tonight: x8 link, ~31.5 GB/s theoretical. VRAM is ~448 GB/s."),
+   ]},
+ { id: 9, name: "Inference and serving", goal: "Batching, KV caching, decoding strategies, latency vs throughput, routing and cascades.",
+   sessions: ["Learn: greedy vs sampling, static vs dynamic caches, cascades.", "Do: run Baton run() vs solve(); record median and p90 latency.", "Prove: show a cascade gives identical answers faster (the early-gate test)."],
+   checkpoint: "Why can a router only save latency, not add accuracy, when the gate is exact?",
+   lab: "Measure the early-gate cascade on 60 questions; confirm identical outputs and the speedup.",
+   gens: [
+    () => { const p = R(40, 95) / 100, a = R(2, 4) * 1000, b = R(8, 12) * 1000; const e = a + (1 - p) * b; return num(`Cascade: cheap path ${a} ms always runs; it succeeds ${Math.round(p * 100)}% of the time, else the ${b} ms path also runs. Mean latency (ms)?`, e, `${a} + (1 − ${p})·${b} = ${fmt(e, 0)} ms.`, 0.02); },
+    () => mc("StaticLayer.update in recent transformers writes KV at…", ["Its own cumulative_length counter", "The cache_position you pass", "Random free slots", "Position 0 always"], 0, "That mismatch caused the R1 crash; the missing StaticLayer.crop is issue #43011."),
+    () => { const n = R(10, 400); return num(`Greedy decode of ${n} tokens with one .item() sync per token: host-device syncs?`, n, `One per generated token: ${n}.`, 0); },
+   ]},
+ { id: 10, name: "Systems around the model", goal: "Tools, verifiers, program-of-thought, retrieval and agents.",
+   sessions: ["Learn: model proposes / code verifies; what each verifier can and cannot check.", "Do: build a gate and a program-of-thought path for a new task.", "Prove: measure passed-but-wrong separately from parse failures."],
+   checkpoint: "The gate was 115/115 on packets and 83/111 on invoices. Why?",
+   lab: "Add a third task family and pre-register whether gate-first or PoT wins.",
+   gens: [
+    () => mc("An arithmetic gate passes 'Node_A_pkts=1748 Node_A_drops=1748'. What does it miss?", ["A correct number in the wrong role", "A misread digit", "A syntax error", "Nothing"], 0, "It checks arithmetic, not reading. A read check also misses roles."),
+    () => mc("Invoice extractor dropped 2 of 4 line items; read check passes. Why?", ["Omissions use no foreign numbers", "Regex bug", "Tolerance", "Tokenizer"], 0, "A string check can only catch numbers that are not in the source."),
+    () => mc("Best measured system on packets (fresh data)?", ["Gate first, else program-of-thought: 100% / 96.7%", "Plain 3B: 72.5%", "Trained reasoner", "Constrained grammar"], 0, "Replicated with all four predictions confirmed; it did not transfer to invoices."),
+   ]},
+ { id: 11, name: "Evaluation", goal: "Pre-registration, intervals, baselines, paired tests, replication, contamination.",
+   sessions: ["Learn: Wilson interval, McNemar test, what counts as replication.", "Do: pre-register 3 predictions with probabilities before a run.", "Prove: score them honestly, including failures."],
+   checkpoint: "Why must a composition chosen after seeing results be replicated on fresh data?",
+   lab: "Score any two arms with McNemar on paired questions; report wins/losses and p.",
+   gens: [
+    () => { const a = R(0, 12), b = R(0, 12); const p = binomTwoSided(a, b); return num(`Paired comparison: A-only right ${a}, B-only right ${b}. Exact McNemar p-value?`, p, `Two-sided binomial on ${a + b} discordant pairs: p = ${fmt(p, 4)}.`, 0.02); },
+    () => { const n = pick([60, 120]), k = R(Math.floor(n / 2), n); const [lo, hi] = wilson(k, n); return num(`${k}/${n}. Width of the 95% Wilson interval in points?`, hi - lo, `${fmt(lo, 1)} to ${fmt(hi, 1)}: width ${fmt(hi - lo, 1)}.`, 0.03); },
+    () => mc("Your prediction had P = 0.9 and failed. Correct response?", ["Record it as failed with the cause", "Re-run until it passes", "Change the threshold", "Drop it"], 0, "B (constrained grammar) failed at P = 0.9; the record says so."),
+   ]},
+ { id: 12, name: "Security and integrity", goal: "Seams, deserialisation, memory safety, supply chain, silent wrong answers.",
+   sessions: ["Learn: the seam idea; T0–T4 evidence tiers; SECURITY.md scoping.", "Do: validate one sanitizer with a planted bug and a clean control.", "Prove: rank three targets by likelihood × criticality with written reasons."],
+   checkpoint: "Why can MemorySanitizer find an in-buffer uninitialized read that AddressSanitizer misses?",
+   lab: "Re-run run_toolcheck.sh; add one new target to the ranking table.",
+   gens: [
+    () => { const ex = R(1, 5), ea = R(1, 5), ga = R(1, 5), br = R(1, 5); return num(`Risk rubric: exposure ${ex}, ease ${ea}, attacker gain ${ga}, blast radius ${br}. Risk out of 25? (likelihood = mean of exposure and ease; impact = mean of gain and radius)`, ((ex + ea) / 2) * ((ga + br) / 2), `((${ex}+${ea})/2) × ((${ga}+${br})/2) = ${fmt(((ex + ea) / 2) * ((ga + br) / 2), 2)}.`, 0.01); },
+    () => mc("Minimum evidence tier to call something a finding?", ["T3: reproduces through the real entry point", "T1: code reading", "T2: harness", "T0: scanner hit"], 0, "T0–T2 are leads. T4 adds a verified fix."),
+    () => mc("A tool's positive control did not fire. The tool is…", ["Unavailable until fixed", "Fine for negatives", "Fine if the inventory lists it", "A finding"], 0, "Rule V-1. The valgrind inventory was wrong; only a planted bug exposed it."),
+    () => mc("The project's SECURITY.md disclaims malformed-model crashes. You found one. Route it as…", ["A regular bug, not a security report", "A private advisory", "A CVE request", "Nothing"], 0, "Scope first (V-3)."),
+   ]},
+ { id: 13, name: "Deployment and organisation", goal: "MLOps, monitoring, drift, cost, governance, threat models, task forces.",
+   sessions: ["Learn: monitoring for drift and silent degradation; cost per answer.", "Do: write a one-page threat model for one of your systems.", "Prove: assign the five task-force roles and a work plan with stop conditions."],
+   checkpoint: "Principal vs senior: what changes in scope and output?",
+   lab: "Threat-model Baton served as an MCP tool; rank threats with the rubric.",
+   gens: [
+    () => mc("Which role takes nothing past 'reproduced' without proof?", ["Verifier", "Hunter", "Instrument owner", "Disclosure owner"], 0, "Five roles: threat model, instruments, hunters, verifier, disclosure."),
+    () => { const q = R(1000, 20000), ms = R(500, 12000); return num(`${q} answers/day at ${ms} ms each on one GPU. GPU-hours per day?`, q * ms / 3.6e6, `${q} × ${ms} ms ÷ 3,600,000 = ${fmt(q * ms / 3.6e6, 2)} h.`, 0.02); },
+    () => mc("Principal-level output is mainly…", ["Threat models, secure defaults and policy across a stack", "More bugs in one component", "Faster patches", "More PRs"], 0, "From the senior/principal table in your guide."),
+   ]},
+];
+
+
+// ---------- ask Claude ----------
+function claudeUrl(prompt) { return "https://claude.ai/new?q=" + encodeURIComponent(prompt); }
+function askButtons(prompt) {
+  const wrap = document.createElement("div"); wrap.className = "row";
+  const a = document.createElement("a"); a.href = claudeUrl(prompt); a.target = "_blank"; a.rel = "noopener";
+  const b1 = document.createElement("button"); b1.textContent = "Ask Claude"; a.appendChild(b1);
+  const b2 = document.createElement("button"); b2.textContent = "Copy question for Claude";
+  b2.onclick = async () => {
+    try { await navigator.clipboard.writeText(prompt); b2.textContent = "Copied"; }
+    catch (e) { window.prompt("Copy this:", prompt); }
+  };
+  wrap.appendChild(a); wrap.appendChild(b2); return wrap;
+}
+function drillPrompt(c, given, ok) {
+  const correct = c.q.kind === "mc" ? c.q.choices[c.q.answer] : fmt(c.q.answer, 4);
+  const mine = c.q.kind === "mc" ? c.q.choices[given] : String(given);
+  return [
+    `I'm studying machine learning layer by layer (layer ${c.layer.id}: ${c.layer.name}).`, "",
+    `Practice question: ${c.q.q}`,
+    `My answer: ${mine} (${ok ? "marked correct" : "marked wrong"})`,
+    `Expected answer: ${correct}`,
+    `Explanation given: ${c.q.explain}`, "",
+    "Explain the reasoning step by step, point out where my thinking went wrong if it did, " +
+    "then give me one similar practice problem with the answer hidden at the end.",
+  ].join("\n");
+}
+function layerPrompt(l) {
+  return [
+    `I'm studying machine learning layer by layer. Teach me layer ${l.id}: ${l.name}.`, "",
+    `Goal: ${l.goal}`, "Planned sessions:", ...l.sessions.map(s => "- " + s),
+    `Checkpoint question: ${l.checkpoint}`, "",
+    "Start with the core ideas in plain language, then quiz me with three questions one at a time. " +
+    "Wait for my answer before giving the next one.",
+  ].join("\n");
+}
+
+// ---------- storage ----------
+const KEY = "ml13.v1";
+// Some sandboxed artifact viewers and mobile webviews throw on any localStorage
+// access. Fall back to in-memory storage so the app still runs (progress just
+// won't persist) instead of the whole script dying before the UI is wired.
+const safeStore = (() => {
+  try { const t = "__ml13t"; localStorage.setItem(t, "1"); localStorage.removeItem(t); return localStorage; }
+  catch (e) { const m = {}; return { getItem: k => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, removeItem: k => { delete m[k]; } }; }
+})();
+let store;
+try { store = JSON.parse(safeStore.getItem(KEY) || '{"layers":{},"rounds":[],"done":{}}'); }
+catch (e) { store = { layers: {}, rounds: [], done: {} }; }
+const save = () => { try { safeStore.setItem(KEY, JSON.stringify(store)); } catch (e) {} };
+const stat = id => store.layers[id] || (store.layers[id] = { seen: 0, right: 0 });
+
+// ---------- drill engine ----------
+let state = null;
+function chooseLayer(sel) {
+  if (sel !== "all") return LAYERS.find(l => l.id === +sel);
+  const weights = LAYERS.map(l => { const s = stat(l.id); const acc = s.seen ? s.right / s.seen : 0.5; return 0.2 + (1 - acc) + 1 / (1 + s.seen); });
+  let r = Math.random() * weights.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < LAYERS.length; i++) { r -= weights[i]; if (r <= 0) return LAYERS[i]; }
+  return LAYERS[LAYERS.length - 1];
+}
+function shuffledChoices(q) {
+  const idx = q.choices.map((_, i) => i).sort(() => Math.random() - 0.5);
+  return { order: idx, correctPos: idx.indexOf(q.answer) };
+}
+function isRight(q, given) {
+  if (q.kind === "mc") return given === q.answer;
+  const v = parseFloat(String(given).replace(/,/g, ""));
+  if (!isFinite(v)) return false;
+  if (q.tol === 0) return Math.abs(v - q.answer) < 1e-9 || Math.round(v) === q.answer;
+  return Math.abs(v - q.answer) <= Math.max(Math.abs(q.answer) * q.tol, 0.005);
+}
+function nextQuestion() {
+  const layer = chooseLayer(state.sel);
+  const q = pick(layer.gens)();
+  state.cur = { layer, q, answered: false };
+  $("qlayer").textContent = `Layer ${layer.id}: ${layer.name}`;
+  $("qtext").textContent = q.q;
+  $("fb").textContent = ""; $("fb").className = "fb";
+  $("next").classList.add("hide"); $("ask").innerHTML = "";
+  const area = $("answerArea"); area.innerHTML = "";
+  if (q.kind === "mc") {
+    const { order } = shuffledChoices(q);
+    const box = document.createElement("div"); box.className = "choices";
+    order.forEach(i => { const b = document.createElement("button"); b.textContent = q.choices[i]; b.onclick = () => answer(i); box.appendChild(b); });
+    area.appendChild(box);
+  } else {
+    const inp = document.createElement("input"); inp.type = "text"; inp.inputMode = "decimal"; inp.placeholder = "Your answer";
+    inp.onkeydown = e => { if (e.key === "Enter") answer(inp.value); };
+    const b = document.createElement("button"); b.textContent = "Check"; b.className = "primary"; b.onclick = () => answer(inp.value);
+    area.appendChild(inp); area.appendChild(b); inp.focus();
+  }
+}
+function answer(given) {
+  const c = state.cur; if (!c || c.answered) return;
+  c.answered = true;
+  const ok = isRight(c.q, given);
+  const s = stat(c.layer.id); s.seen++; if (ok) s.right++;
+  state.total++; if (ok) { state.right++; state.streak++; state.best = Math.max(state.best, state.streak); } else state.streak = 0;
+  state.perLayer[c.layer.id] = state.perLayer[c.layer.id] || [0, 0];
+  state.perLayer[c.layer.id][0]++; if (ok) state.perLayer[c.layer.id][1]++;
+  save();
+  const correctText = c.q.kind === "mc" ? c.q.choices[c.q.answer] : fmt(c.q.answer, 4);
+  $("fb").className = "fb " + (ok ? "ok" : "bad");
+  $("fb").textContent = (ok ? "Correct. " : `Not quite. Answer: ${correctText}. `) + c.q.explain;
+  $("score").textContent = `${state.right}/${state.total} · streak ${state.streak}`;
+  $("next").classList.remove("hide");
+  $("ask").innerHTML = ""; $("ask").appendChild(askButtons(drillPrompt(c, given, ok)));
+  if (state.timeLeft === 0 && state.dur > 0) endRound();
+}
+function tick() {
+  if (!state || state.dur === 0) return;
+  state.timeLeft = Math.max(0, state.dur - Math.floor((Date.now() - state.t0) / 1000));
+  $("clock").textContent = `${Math.floor(state.timeLeft / 60)}:${String(state.timeLeft % 60).padStart(2, "0")}`;
+  if (state.timeLeft === 0 && (!state.cur || state.cur.answered)) endRound();
+}
+function startRound() {
+  state = { sel: $("layerSel").value, dur: +$("dur").value, t0: Date.now(), timeLeft: +$("dur").value, total: 0, right: 0, streak: 0, best: 0, perLayer: {} };
+  $("summary").classList.add("hide"); $("round").classList.remove("hide");
+  $("clock").textContent = state.dur ? "" : "∞"; $("score").textContent = "0/0";
+  clearInterval(state.timer); state.timer = setInterval(tick, 250); tick();
+  nextQuestion();
+}
+function endRound() {
+  if (!state || state.ended) return; state.ended = true; clearInterval(state.timer);
+  store.rounds.push({ at: new Date().toISOString(), dur: state.dur, sel: state.sel, total: state.total, right: state.right, best: state.best });
+  save();
+  $("round").classList.add("hide");
+  const rows = Object.entries(state.perLayer).map(([id, [n, k]]) => `<tr><td>${id}. ${LAYERS[id - 1].name}</td><td>${k}/${n}</td></tr>`).join("");
+  $("summary").innerHTML = `<div class="big">${state.right}/${state.total}</div><div class="muted">best streak ${state.best}</div><table><tr><th>Layer</th><th>Score</th></tr>${rows}</table><p><button class="primary" onclick="startRound()">Another round</button></p>`;
+  $("summary").classList.remove("hide");
+}
+
+// ---------- plan + progress views ----------
+function renderPlan() {
+  const v = $("view-plan");
+  v.innerHTML = `<div class="card"><b>How to use this plan.</b> One layer per week, three sessions each (learn, do, prove), then the checkpoint. Phone drills fill the gaps between PC sessions. Order: weakest layers first (yours: 2 Learning theory and 5 Training).</div>` +
+    LAYERS.map(l => {
+      const done = store.done[l.id] || {};
+      const box = (k, label) => `<label><input type="checkbox" data-l="${l.id}" data-k="${k}" ${done[k] ? "checked" : ""}> ${label}</label>`;
+      return `<details class="card"><summary>${l.id}. ${l.name}</summary><p>${l.goal}</p><ol>${l.sessions.map((s, i) => `<li>${box("s" + i, s)}</li>`).join("")}</ol>
+        <p>${box("cp", "<b>Checkpoint:</b> " + l.checkpoint)}</p><p class="muted"><b>PC lab:</b> ${l.lab}</p>
+        <p class="row"><button onclick="drillLayer(${l.id})">Drill this layer</button><span data-ask="${l.id}"></span></p></details>`;
+    }).join("");
+  v.querySelectorAll("[data-ask]").forEach(sp => sp.appendChild(askButtons(layerPrompt(LAYERS[+sp.dataset.ask - 1]))));
+  v.querySelectorAll("input[type=checkbox]").forEach(cb => cb.onchange = () => {
+    const d = store.done[cb.dataset.l] || (store.done[cb.dataset.l] = {}); d[cb.dataset.k] = cb.checked; save();
+  });
+}
+function renderStats() {
+  const rows = LAYERS.map(l => { const s = stat(l.id); const d = store.done[l.id] || {}; const steps = ["s0", "s1", "s2", "cp"].filter(k => d[k]).length;
+    return `<tr><td>${l.id}. ${l.name}</td><td>${s.seen ? Math.round(100 * s.right / s.seen) + "%" : "–"} (${s.seen})</td><td>${steps}/4</td></tr>`; }).join("");
+  const last = store.rounds.slice(-8).reverse().map(r => `<tr><td>${new Date(r.at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</td><td>${r.right}/${r.total}</td><td>${r.dur ? r.dur / 60 + " min" : "untimed"}</td></tr>`).join("");
+  $("view-stats").innerHTML = `<div class="card"><table><tr><th>Layer</th><th>Drill accuracy (n)</th><th>Plan steps</th></tr>${rows}</table></div>
+    <div class="card"><b>Recent rounds</b><table>${last || "<tr><td class=muted>No rounds yet</td></tr>"}</table></div>
+    <div class="card"><button id="reset">Reset all progress</button></div>`;
+  $("reset").onclick = () => { if (confirm("Erase all progress on this device?")) { safeStore.removeItem(KEY); location.reload(); } };
+}
+function drillLayer(id) { show("drill"); $("layerSel").value = String(id); startRound(); }
+function show(name) {
+  ["drill", "plan", "stats"].forEach(n => { $("view-" + n).classList.toggle("hide", n !== name); $("tab-" + n).classList.toggle("on", n === name); });
+  if (name === "plan") renderPlan(); if (name === "stats") renderStats();
+}
+const $ = id => document.getElementById(id);
+$("layerSel").innerHTML = `<option value="all">All (adaptive)</option>` + LAYERS.map(l => `<option value="${l.id}">${l.id}. ${l.name}</option>`).join("");
+$("start").onclick = startRound; $("stop").onclick = endRound; $("next").onclick = nextQuestion;
+["drill", "plan", "stats"].forEach(n => $("tab-" + n).onclick = () => show(n));
+window.ML13 = { LAYERS, wilson, binomTwoSided, isRight, drillPrompt, layerPrompt, claudeUrl };  // exposed for automated checks
+</script>
+</body>
+</html>

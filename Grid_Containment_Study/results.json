@@ -1,0 +1,758 @@
+{
+ "assumptions": {
+  "n_agents": 8,
+  "T": 600,
+  "warmup": 90,
+  "attack_window": [
+   120,
+   480
+  ],
+  "base_rate": [
+   0.2,
+   1.0
+  ],
+  "burst_every": 180,
+  "burst_dur": [
+   15,
+   90
+  ],
+  "burst_mult": [
+   5,
+   40
+  ],
+  "ratio_sigma": 0.6,
+  "burst_ratio_shift": [
+   0.2,
+   5.0
+  ],
+  "reroute_share": 0.5,
+  "human_latency": [
+   10,
+   120
+  ],
+  "human_false_reject": 0.02
+ },
+ "tuned": {
+  "D1": {
+   "cfg": {
+    "rate": {
+     "W": 5,
+     "c": 80
+    }
+   },
+   "feasible": true
+  },
+  "D3a": {
+   "cfg": {
+    "relay": {
+     "W": 5,
+     "tau": 100
+    }
+   },
+   "feasible": false
+  },
+  "D3b": {
+   "cfg": {
+    "breaker": {
+     "pick": 60,
+     "curve": "SI",
+     "tms": 0.1
+    }
+   },
+   "feasible": true
+  },
+  "D3": {
+   "cfg": {
+    "relay": {
+     "W": 10,
+     "tau": 3
+    },
+    "breaker": {
+     "pick": 60,
+     "curve": "SI",
+     "tms": 0.1
+    },
+    "droop": null
+   },
+   "feasible": false
+  }
+ },
+ "validation": {
+  "D0_contains_nothing": true,
+  "D1_trips_1000x_flooder_within_5s": true,
+  "D3b_trips_1000x_flooder_within_5s": true,
+  "D3_trips_1000x_flooder_within_5s": false,
+  "D1_zero_trips_on_flat_trace": true,
+  "D3a_zero_trips_on_flat_trace": true,
+  "D3b_zero_trips_on_flat_trace": true,
+  "D3_zero_trips_on_flat_trace": true
+ },
+ "eval": {
+  "D0": {
+   "A1": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 2.066666666666667,
+    "blast_sd": 0.771722460186015,
+    "true_detect": 0,
+    "avail": 1.0,
+    "ttc": null
+   },
+   "A2": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 2.95,
+    "blast_sd": 1.4309088021254184,
+    "true_detect": 0,
+    "avail": 1.0,
+    "ttc": null
+   },
+   "A3": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 7606.0,
+    "blast_sd": 2349.0687516545786,
+    "true_detect": 0,
+    "avail": 1.0,
+    "ttc": null
+   },
+   "A4": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 7.9,
+    "blast_sd": 2.8325489110222497,
+    "true_detect": 0,
+    "avail": 1.0,
+    "ttc": null
+   },
+   "A5": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 11.983333333333333,
+    "blast_sd": 1.6881120289312028,
+    "true_detect": 0,
+    "avail": 1.0,
+    "ttc": null
+   },
+   "fp_per_h": 0.0,
+   "cascades_per_h": 0.0,
+   "legit_blocked_frac": 0.0,
+   "approvals_per_h": 0.0,
+   "mean_contain_A1_A5": 0,
+   "mean_true_detect": 0,
+   "avail_attack_free": 1.0
+  },
+  "D1": {
+   "A1": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 2.066666666666667,
+    "blast_sd": 0.771722460186015,
+    "true_detect": 0,
+    "avail": 0.9983015873015874,
+    "ttc": null
+   },
+   "A2": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 2.95,
+    "blast_sd": 1.4309088021254184,
+    "true_detect": 0,
+    "avail": 0.9983015873015874,
+    "ttc": null
+   },
+   "A3": {
+    "contain": 0.5,
+    "contain_sd": 0.5,
+    "blast": 3618.7833333333333,
+    "blast_sd": 3836.742316478337,
+    "true_detect": 0.5,
+    "avail": 0.9983015873015874,
+    "ttc": 3.0
+   },
+   "A4": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 7.9,
+    "blast_sd": 2.8325489110222497,
+    "true_detect": 0,
+    "avail": 0.9983015873015874,
+    "ttc": null
+   },
+   "A5": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 11.966666666666667,
+    "blast_sd": 1.7026123718829511,
+    "true_detect": 0.016666666666666666,
+    "avail": 0.9985138888888889,
+    "ttc": null
+   },
+   "fp_per_h": 0.2,
+   "cascades_per_h": 0.0,
+   "legit_blocked_frac": 0.0,
+   "approvals_per_h": 0.0,
+   "mean_contain_A1_A5": 0.1,
+   "mean_true_detect": 0.10333333333333333,
+   "avail_attack_free": 0.9985138888888889
+  },
+  "D2": {
+   "A1": {
+    "contain": 0.8833333333333333,
+    "contain_sd": 0.3210226714043037,
+    "blast": 0.13333333333333333,
+    "blast_sd": 0.3858612300930075,
+    "true_detect": 0.9833333333333333,
+    "avail": 1.0,
+    "ttc": 48
+   },
+   "A2": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0,
+    "avail": 1.0,
+    "ttc": null
+   },
+   "A3": {
+    "contain": 0.016666666666666666,
+    "contain_sd": 0.12801909579781012,
+    "blast": 5806.75,
+    "blast_sd": 2796.864813947932,
+    "true_detect": 0.18333333333333332,
+    "avail": 1.0,
+    "ttc": 12
+   },
+   "A4": {
+    "contain": 0.7333333333333333,
+    "contain_sd": 0.4422166387140533,
+    "blast": 0.2833333333333333,
+    "blast_sd": 0.48619840486049404,
+    "true_detect": 1,
+    "avail": 1.0,
+    "ttc": 67.5
+   },
+   "A5": {
+    "contain": 0.6833333333333333,
+    "contain_sd": 0.46517619123176207,
+    "blast": 0.4,
+    "blast_sd": 0.6377042156569663,
+    "true_detect": 0.9833333333333333,
+    "avail": 0.9223715277777778,
+    "ttc": 59
+   },
+   "fp_per_h": 0.0,
+   "cascades_per_h": 0.0,
+   "legit_blocked_frac": 0.0013766279560547589,
+   "approvals_per_h": 7576.3,
+   "mean_contain_A1_A5": 0.6633333333333333,
+   "mean_true_detect": 0.63,
+   "avail_attack_free": 1.0
+  },
+  "D3a": {
+   "A1": {
+    "contain": 0.5166666666666667,
+    "contain_sd": 0.49972214501883166,
+    "blast": 1,
+    "blast_sd": 1.1547005383792515,
+    "true_detect": 0.38333333333333336,
+    "avail": 0.6566031746031746,
+    "ttc": 0.0
+   },
+   "A2": {
+    "contain": 0.3333333333333333,
+    "contain_sd": 0.4714045207910317,
+    "blast": 2.05,
+    "blast_sd": 1.8387042539063572,
+    "true_detect": 0.38333333333333336,
+    "avail": 0.6641150793650794,
+    "ttc": null
+   },
+   "A3": {
+    "contain": 0.6,
+    "contain_sd": 0.4898979485566356,
+    "blast": 2785.616666666667,
+    "blast_sd": 3800.686675201674,
+    "true_detect": 0.36666666666666664,
+    "avail": 0.6671309523809523,
+    "ttc": 3
+   },
+   "A4": {
+    "contain": 0.3,
+    "contain_sd": 0.458257569495584,
+    "blast": 4.583333333333333,
+    "blast_sd": 4.030267429781249,
+    "true_detect": 0.25,
+    "avail": 0.6582619047619047,
+    "ttc": null
+   },
+   "A5": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 7.1,
+    "blast_sd": 2.501332977967281,
+    "true_detect": 0.7166666666666667,
+    "avail": 0.6762291666666667,
+    "ttc": null
+   },
+   "fp_per_h": 29.9,
+   "cascades_per_h": 9.566666666666666,
+   "legit_blocked_frac": 0.0,
+   "approvals_per_h": 0.0,
+   "mean_contain_A1_A5": 0.35,
+   "mean_true_detect": 0.42,
+   "avail_attack_free": 0.6646597222222222
+  },
+  "D3b": {
+   "A1": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 2.066666666666667,
+    "blast_sd": 0.771722460186015,
+    "true_detect": 0,
+    "avail": 0.9985674603174604,
+    "ttc": null
+   },
+   "A2": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 1,
+    "avail": 0.9985674603174604,
+    "ttc": 0.0
+   },
+   "A3": {
+    "contain": 0.5,
+    "contain_sd": 0.5,
+    "blast": 3338.6666666666665,
+    "blast_sd": 3743.322350829838,
+    "true_detect": 0.55,
+    "avail": 0.9985674603174604,
+    "ttc": 3.0
+   },
+   "A4": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 7.9,
+    "blast_sd": 2.8325489110222497,
+    "true_detect": 0,
+    "avail": 0.9985674603174604,
+    "ttc": null
+   },
+   "A5": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 11.966666666666667,
+    "blast_sd": 1.7026123718829511,
+    "true_detect": 0,
+    "avail": 0.9987465277777777,
+    "ttc": null
+   },
+   "fp_per_h": 0.1,
+   "cascades_per_h": 0.016666666666666666,
+   "legit_blocked_frac": 0.0,
+   "approvals_per_h": 0.0,
+   "mean_contain_A1_A5": 0.3,
+   "mean_true_detect": 0.31,
+   "avail_attack_free": 0.9987465277777777
+  },
+  "D3": {
+   "A1": {
+    "contain": 0.9833333333333333,
+    "contain_sd": 0.12801909579781012,
+    "blast": 0.05,
+    "blast_sd": 0.3840572873934304,
+    "true_detect": 0.03333333333333333,
+    "avail": 0.19467460317460317,
+    "ttc": 0
+   },
+   "A2": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0.03333333333333333,
+    "avail": 0.1961468253968254,
+    "ttc": 0.0
+   },
+   "A3": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0,
+    "avail": 0.19601984126984126,
+    "ttc": null
+   },
+   "A4": {
+    "contain": 0.9333333333333333,
+    "contain_sd": 0.24944382578492943,
+    "blast": 0.1,
+    "blast_sd": 0.39581140290126393,
+    "true_detect": 0.06666666666666667,
+    "avail": 0.19551984126984126,
+    "ttc": null
+   },
+   "A5": {
+    "contain": 0.9333333333333333,
+    "contain_sd": 0.24944382578492943,
+    "blast": 0.11666666666666667,
+    "blast_sd": 0.4506168611531925,
+    "true_detect": 0.06666666666666667,
+    "avail": 0.19642708333333334,
+    "ttc": null
+   },
+   "fp_per_h": 48.0,
+   "cascades_per_h": 28.35,
+   "legit_blocked_frac": 0.0,
+   "approvals_per_h": 0.0,
+   "mean_contain_A1_A5": 0.97,
+   "mean_true_detect": 0.04,
+   "avail_attack_free": 0.19487152777777778
+  },
+  "D4": {
+   "A1": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0.03333333333333333,
+    "avail": 0.19891666666666666,
+    "ttc": 16.5
+   },
+   "A2": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0.03333333333333333,
+    "avail": 0.19975,
+    "ttc": 0.0
+   },
+   "A3": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0,
+    "avail": 0.19981349206349205,
+    "ttc": null
+   },
+   "A4": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0.05,
+    "avail": 0.19871825396825396,
+    "ttc": 10
+   },
+   "A5": {
+    "contain": 0.9833333333333333,
+    "contain_sd": 0.12801909579781012,
+    "blast": 0.016666666666666666,
+    "blast_sd": 0.12801909579781012,
+    "true_detect": 0.11666666666666667,
+    "avail": 0.19971527777777778,
+    "ttc": 70.0
+   },
+   "fp_per_h": 48.0,
+   "cascades_per_h": 28.016666666666666,
+   "legit_blocked_frac": 0.0014244196064466474,
+   "approvals_per_h": 1198.9,
+   "mean_contain_A1_A5": 0.9966666666666667,
+   "mean_true_detect": 0.04666666666666667,
+   "avail_attack_free": 0.19776388888888888
+  },
+  "RND": {
+   "A1": {
+    "contain": 0.1,
+    "contain_sd": 0.3,
+    "blast": 1.8333333333333333,
+    "blast_sd": 0.9516068282413465,
+    "true_detect": 0.38333333333333336,
+    "avail": 0.7090198412698413,
+    "ttc": null
+   },
+   "A2": {
+    "contain": 0.25,
+    "contain_sd": 0.4330127018922193,
+    "blast": 2.3333333333333335,
+    "blast_sd": 1.8135294011647258,
+    "true_detect": 0.4,
+    "avail": 0.7156944444444444,
+    "ttc": null
+   },
+   "A3": {
+    "contain": 0.31666666666666665,
+    "contain_sd": 0.46517619123176207,
+    "blast": 4816.0,
+    "blast_sd": 3931.9566079328324,
+    "true_detect": 0.2833333333333333,
+    "avail": 0.7110119047619048,
+    "ttc": null
+   },
+   "A4": {
+    "contain": 0.21666666666666667,
+    "contain_sd": 0.41197356981027583,
+    "blast": 5.6,
+    "blast_sd": 3.8738439135652674,
+    "true_detect": 0.23333333333333334,
+    "avail": 0.7048690476190476,
+    "ttc": null
+   },
+   "A5": {
+    "contain": 0,
+    "contain_sd": 0.0,
+    "blast": 7.9,
+    "blast_sd": 2.724579478255926,
+    "true_detect": 0.8333333333333334,
+    "avail": 0.7109513888888889,
+    "ttc": null
+   },
+   "fp_per_h": 28.9,
+   "cascades_per_h": 8.766666666666667,
+   "legit_blocked_frac": 0.0,
+   "approvals_per_h": 0.0,
+   "mean_contain_A1_A5": 0.17666666666666667,
+   "mean_true_detect": 0.4266666666666667,
+   "avail_attack_free": 0.7142430555555556
+  },
+  "D2_p0.5": {
+   "A1": {
+    "contain": 0.5166666666666667,
+    "contain_sd": 0.49972214501883166,
+    "blast": 0.6166666666666667,
+    "blast_sd": 0.7092640943651071,
+    "true_detect": 0.7833333333333333,
+    "avail": 1.0,
+    "ttc": 44
+   },
+   "A2": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0,
+    "avail": 1.0,
+    "ttc": null
+   },
+   "A3": {
+    "contain": 0.016666666666666666,
+    "contain_sd": 0.12801909579781012,
+    "blast": 5829.95,
+    "blast_sd": 2765.3961284958796,
+    "true_detect": 0.18333333333333332,
+    "avail": 1.0,
+    "ttc": 12
+   },
+   "A4": {
+    "contain": 0.45,
+    "contain_sd": 0.49749371855331,
+    "blast": 1,
+    "blast_sd": 1.224744871391589,
+    "true_detect": 0.9166666666666666,
+    "avail": 1.0,
+    "ttc": 69
+   },
+   "A5": {
+    "contain": 0.31666666666666665,
+    "contain_sd": 0.46517619123176207,
+    "blast": 1.0666666666666667,
+    "blast_sd": 0.9637888196533974,
+    "true_detect": 0.8666666666666667,
+    "avail": 0.9389479166666667,
+    "ttc": 58
+   },
+   "fp_per_h": 0.0,
+   "cascades_per_h": 0.0,
+   "legit_blocked_frac": 0.0013766279560547589,
+   "approvals_per_h": 7576.3,
+   "mean_contain_A1_A5": 0.46,
+   "mean_true_detect": 0.55,
+   "avail_attack_free": 1.0
+  },
+  "D4_p0.5": {
+   "A1": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0.03333333333333333,
+    "avail": 0.19891666666666666,
+    "ttc": 16.5
+   },
+   "A2": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0.03333333333333333,
+    "avail": 0.19975,
+    "ttc": 0.0
+   },
+   "A3": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0,
+    "avail": 0.19981349206349205,
+    "ttc": null
+   },
+   "A4": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0.05,
+    "avail": 0.19871825396825396,
+    "ttc": 10
+   },
+   "A5": {
+    "contain": 0.9833333333333333,
+    "contain_sd": 0.12801909579781012,
+    "blast": 0.016666666666666666,
+    "blast_sd": 0.12801909579781012,
+    "true_detect": 0.11666666666666667,
+    "avail": 0.19971527777777778,
+    "ttc": 70.0
+   },
+   "fp_per_h": 48.0,
+   "cascades_per_h": 28.016666666666666,
+   "legit_blocked_frac": 0.0014244196064466474,
+   "approvals_per_h": 1198.9,
+   "mean_contain_A1_A5": 0.9966666666666667,
+   "mean_true_detect": 0.04666666666666667,
+   "avail_attack_free": 0.19776388888888888
+  },
+  "D2_p0.95": {
+   "A1": {
+    "contain": 0.9833333333333333,
+    "contain_sd": 0.12801909579781012,
+    "blast": 0.016666666666666666,
+    "blast_sd": 0.12801909579781012,
+    "true_detect": 1,
+    "avail": 1.0,
+    "ttc": 48
+   },
+   "A2": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0,
+    "avail": 1.0,
+    "ttc": null
+   },
+   "A3": {
+    "contain": 0.016666666666666666,
+    "contain_sd": 0.12801909579781012,
+    "blast": 5788.366666666667,
+    "blast_sd": 2824.8203716736084,
+    "true_detect": 0.18333333333333332,
+    "avail": 1.0,
+    "ttc": 12
+   },
+   "A4": {
+    "contain": 0.9333333333333333,
+    "contain_sd": 0.24944382578492943,
+    "blast": 0.06666666666666667,
+    "blast_sd": 0.24944382578492943,
+    "true_detect": 1,
+    "avail": 1.0,
+    "ttc": 67.0
+   },
+   "A5": {
+    "contain": 0.8666666666666667,
+    "contain_sd": 0.339934634239519,
+    "blast": 0.15,
+    "blast_sd": 0.4010403138505322,
+    "true_detect": 1,
+    "avail": 0.9138993055555555,
+    "ttc": 61.5
+   },
+   "fp_per_h": 0.0,
+   "cascades_per_h": 0.0,
+   "legit_blocked_frac": 0.0013766279560547589,
+   "approvals_per_h": 7576.3,
+   "mean_contain_A1_A5": 0.76,
+   "mean_true_detect": 0.6366666666666667,
+   "avail_attack_free": 1.0
+  },
+  "D4_p0.95": {
+   "A1": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0.03333333333333333,
+    "avail": 0.19891666666666666,
+    "ttc": 16.5
+   },
+   "A2": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0.03333333333333333,
+    "avail": 0.19975,
+    "ttc": 0.0
+   },
+   "A3": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0,
+    "avail": 0.19981349206349205,
+    "ttc": null
+   },
+   "A4": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0.05,
+    "avail": 0.19871825396825396,
+    "ttc": 10
+   },
+   "A5": {
+    "contain": 1,
+    "contain_sd": 0.0,
+    "blast": 0,
+    "blast_sd": 0.0,
+    "true_detect": 0.11666666666666667,
+    "avail": 0.19957986111111112,
+    "ttc": 67
+   },
+   "fp_per_h": 48.0,
+   "cascades_per_h": 28.016666666666666,
+   "legit_blocked_frac": 0.0014244196064466474,
+   "approvals_per_h": 1198.9,
+   "mean_contain_A1_A5": 1,
+   "mean_true_detect": 0.04666666666666667,
+   "avail_attack_free": 0.19776388888888888
+  }
+ },
+ "mesh_A6": {
+  "q=1 (unilateral)": {
+   "healthy_severed_mean": 8,
+   "runs_with_any_sever": 1.0,
+   "median_s_to_first": 0.0
+  },
+  "q=3": {
+   "healthy_severed_mean": 7.95,
+   "runs_with_any_sever": 1.0,
+   "median_s_to_first": 10.0
+  },
+  "q=3 + attested identities": {
+   "healthy_severed_mean": 0,
+   "runs_with_any_sever": 0.0,
+   "median_s_to_first": null
+  }
+ },
+ "runtime_s": 41.0
+}
